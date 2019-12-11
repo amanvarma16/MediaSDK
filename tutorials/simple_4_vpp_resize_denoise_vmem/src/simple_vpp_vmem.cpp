@@ -88,13 +88,53 @@ int main(int argc, char** argv)
     sts = Initialize(impl, ver, &session, &mfxAllocator);
     MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 
+    // Initialize ENC parameters
+    // Create Media SDK encoder
+    MFXVideoENCODE mfxENC(session);
+
+    // Set required video parameters for encode
+    // - In this example we are encoding an AVC (H.264) stream
+    mfxVideoParam mfxEncParams;
+    memset(&mfxEncParams, 0, sizeof(mfxEncParams));
+
+    mfxEncParams.mfx.CodecId = MFX_CODEC_AVC;
+    mfxEncParams.mfx.TargetUsage = MFX_TARGETUSAGE_BALANCED;
+    mfxEncParams.mfx.TargetKbps = options.values.Bitrate;
+    mfxEncParams.mfx.RateControlMethod = MFX_RATECONTROL_VBR;
+    mfxEncParams.mfx.FrameInfo.FrameRateExtN = options.values.FrameRateN;
+    mfxEncParams.mfx.FrameInfo.FrameRateExtD = options.values.FrameRateD;
+    mfxEncParams.mfx.FrameInfo.FourCC = MFX_FOURCC_NV12;
+    mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
+    mfxEncParams.mfx.FrameInfo.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
+    mfxEncParams.mfx.FrameInfo.CropX = 0;
+    mfxEncParams.mfx.FrameInfo.CropY = 0;
+    mfxEncParams.mfx.FrameInfo.CropW = options.values.Width;
+    mfxEncParams.mfx.FrameInfo.CropH = options.values.Height;
+    // Width must be a multiple of 16
+    // Height must be a multiple of 16 in case of frame picture and a multiple of 32 in case of field picture
+    mfxEncParams.mfx.FrameInfo.Width = MSDK_ALIGN16(options.values.Width);
+    mfxEncParams.mfx.FrameInfo.Height =
+        (MFX_PICSTRUCT_PROGRESSIVE == mfxEncParams.mfx.FrameInfo.PicStruct) ?
+        MSDK_ALIGN16(options.values.Height) :
+        MSDK_ALIGN32(options.values.Height);
+
+    mfxEncParams.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY;
+
+    // Validate video encode parameters (optional)
+    // - In this example the validation result is written to same structure
+    // - MFX_WRN_INCOMPATIBLE_VIDEO_PARAM is returned if some of the video parameters are not supported,
+    //   instead the encoder will select suitable parameters closest matching the requested configuration
+    sts = mfxENC.Query(&mfxEncParams, &mfxEncParams);
+    MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
+    MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
     // Initialize VPP parameters
     // - For video memory surfaces are used to store the raw frames
     //   (Note that when using HW acceleration video surfaces are prefered, for better performance)
     mfxVideoParam VPPParams;
     memset(&VPPParams, 0, sizeof(VPPParams));
     // Input data
-    VPPParams.vpp.In.FourCC = MFX_FOURCC_NV12;
+    VPPParams.vpp.In.FourCC = MFX_FOURCC_RGB4;
     VPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     VPPParams.vpp.In.CropX = 0;
     VPPParams.vpp.In.CropY = 0;
@@ -115,8 +155,8 @@ int main(int argc, char** argv)
     VPPParams.vpp.Out.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     VPPParams.vpp.Out.CropX = 0;
     VPPParams.vpp.Out.CropY = 0;
-    VPPParams.vpp.Out.CropW = options.values.Width / 2;
-    VPPParams.vpp.Out.CropH = options.values.Height / 2;
+    VPPParams.vpp.Out.CropW = options.values.Width;
+    VPPParams.vpp.Out.CropH = options.values.Height;
     VPPParams.vpp.Out.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
     VPPParams.vpp.Out.FrameRateExtN = 30;
     VPPParams.vpp.Out.FrameRateExtD = 1;
@@ -214,6 +254,8 @@ int main(int argc, char** argv)
     mfxSyncPoint syncp;
     mfxU32 nFrame = 0;
 
+    double syncTimeMs{ 0 };
+
     //
     // Stage 1: Main processing loop
     //
@@ -225,7 +267,7 @@ int main(int argc, char** argv)
         sts = mfxAllocator.Lock(mfxAllocator.pthis, pVPPSurfacesIn[nSurfIdxIn].Data.MemId, &(pVPPSurfacesIn[nSurfIdxIn].Data));
         MSDK_BREAK_ON_ERROR(sts);
 
-        sts = LoadRawFrame(&pVPPSurfacesIn[nSurfIdxIn], fSource.get());        // Load frame from file into surface
+        sts = LoadRawRGBFrame(&pVPPSurfacesIn[nSurfIdxIn], fSource.get());        // Load frame from file into surface
         MSDK_BREAK_ON_ERROR(sts);
 
         sts = mfxAllocator.Unlock(mfxAllocator.pthis, pVPPSurfacesIn[nSurfIdxIn].Data.MemId, &(pVPPSurfacesIn[nSurfIdxIn].Data));
@@ -251,7 +293,12 @@ int main(int argc, char** argv)
 
         MSDK_BREAK_ON_ERROR(sts);
 
+        mfxTime syncStart, syncEnd;
+        mfxGetTime(&syncStart);
         sts = session.SyncOperation(syncp, 60000);      // Synchronize. Wait until frame processing is ready
+        mfxGetTime(&syncEnd);
+        syncTimeMs += TimeDiffMsec(syncEnd, syncStart);
+
         MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 
         ++nFrame;
@@ -322,6 +369,7 @@ int main(int argc, char** argv)
     double elapsed = TimeDiffMsec(tEnd, tStart) / 1000;
     double fps = ((double)nFrame / elapsed);
     printf("\nExecution time: %3.2f s (%3.2f fps)\n", elapsed, fps);
+    printf("\nSync time: %3.2f [ms]", syncTimeMs);
 
     // ===================================================================
     // Clean up resources
