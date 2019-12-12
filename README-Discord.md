@@ -11,17 +11,22 @@ Driver Date: 10/24/2019
 Setup
 -----
 1. Re-targeted the solution for Windows SDK Version 10.0.17763.0 (Visual Studio 2017)
-2. VPP input fourcc is `MFX_FOURCC_RGB4`
+2. VPP input FourCC is `MFX_FOURCC_RGB4`
 3. Output resolution same as input resolution
-4. Replace `LoadRawFrame` with `LoadRawRGBFrame`
-5. Add timing around `MFXVideoSession::SyncOperation`
+4. Replace `LoadRawFrame()` with `LoadRawRGBFrame()`
+5. Add timing around `MFXVideoSession::SyncOperation()`
 6. Add video encoder parameter initialization and `MFXVideoENCODE::Query()` right before VPP parameters initialization
 
 Results
 -------
-I use 555 frames of Big Buck Bunny at 1920 x 1080 resolution. When only doing BGRA to NV12 conversion (without step 6), it takes around 1350 ms for `MFXVideoSession::SyncOperation` to execute, about 2.7 ms per frame. When initializing and validating video encoding parameters (`MFXVideoENCODE::Query`), the same sync operation takes about 7700 ms to execute, about 15.4 ms per frame.
+I used 555 frames of Big Buck Bunny at 1920 x 1080 resolution. When only doing BGRA to NV12 conversion (without step 6), it takes around 1350 ms for `MFXVideoSession::SyncOperation()` to execute, about 2.7 ms per frame. When initializing and validating video encoding parameters (`MFXVideoENCODE::Query()`), the same sync operation takes about 7700 ms to execute, about 15.4 ms per frame. You can reproduce the same exact result without specifying input/output files (just using 1000 black frames).
 
 When using system memory, I do not observer any performance penalty, BGRA to NV12 conversion and H264 encoding take about 2.27 ms and 0.9 ms, respectively.
+
+We dig into this issue with `Windows Performance Analyzer` and `GPUView`. We observed about five times lower GPU utilization when validating encoding parameters. Conversion from BGRA to NV12 still takes about 2.7 ms per frame, however, there is a very clear pause between GPU operations that seems to line up with vsync.
+
+When specifying codec `MFX_COEC_HEVC` or `MFX_CODEC_MPEG2` instead of `MFX_CODEC_AVC`, we did not observer any pauses.
+
 
 Integration to Discord
 ----------------------
