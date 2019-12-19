@@ -107,9 +107,16 @@ int main(int argc, char** argv)
     mfxEncParams.mfx.CodecId = MFX_CODEC_AVC;
     mfxEncParams.mfx.TargetUsage = MFX_TARGETUSAGE_BALANCED;
     mfxEncParams.mfx.TargetKbps = options.values.Bitrate;
+    mfxEncParams.mfx.MaxKbps = options.values.Bitrate;
     mfxEncParams.mfx.RateControlMethod = MFX_RATECONTROL_VBR;
+    mfxEncParams.mfx.NumSlice = 0;
     mfxEncParams.mfx.FrameInfo.FrameRateExtN = options.values.FrameRateN;
     mfxEncParams.mfx.FrameInfo.FrameRateExtD = options.values.FrameRateD;
+    mfxEncParams.mfx.EncodedOrder = 0;
+    mfxEncParams.mfx.GopPicSize = 3000;
+    mfxEncParams.mfx.GopRefDist = 1;
+    mfxEncParams.mfx.GopOptFlag = 0;
+    mfxEncParams.mfx.IdrInterval = 0;
     mfxEncParams.mfx.FrameInfo.FourCC = MFX_FOURCC_NV12;
     mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     mfxEncParams.mfx.FrameInfo.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
@@ -124,6 +131,9 @@ int main(int argc, char** argv)
         (MFX_PICSTRUCT_PROGRESSIVE == mfxEncParams.mfx.FrameInfo.PicStruct) ?
         MSDK_ALIGN16(options.values.Height) :
         MSDK_ALIGN32(options.values.Height);
+
+    mfxEncParams.AsyncDepth = 1;
+    mfxEncParams.mfx.NumRefFrame = 2;
 
     mfxEncParams.IOPattern = MFX_IOPATTERN_IN_SYSTEM_MEMORY;
 
@@ -187,7 +197,7 @@ int main(int argc, char** argv)
     mfxBS.MaxLength = par.mfx.BufferSizeInKB * 1000;
     std::vector<mfxU8> bstData(mfxBS.MaxLength);
     mfxBS.Data = bstData.data();
-
+    printf("Bitrate to %d [kbps], frame size: %d [kB]\n", par.mfx.TargetKbps, par.mfx.BufferSizeInKB);
 
     // ===================================
     // Start encoding the frames
@@ -234,10 +244,32 @@ int main(int argc, char** argv)
             sts = WriteBitStreamFrame(&mfxBS, fSink.get());
             MSDK_BREAK_ON_ERROR(sts);
 
+            printf("Frame: %d, type: %c\n", nFrame, mfxFrameTypeString(mfxBS.FrameType));
+
             ++nFrame;
-            if (bEnableOutput) {
+            if (bEnableOutput) { 
                 printf("Frame number: %d\r", nFrame);
                 fflush(stdout);
+            }
+
+            if (!(nFrame % 100)) {
+                mfxVideoParam par;
+                memset(&par, 0, sizeof(par));
+                sts = mfxENC.GetVideoParam(&par);
+                MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
+                par.mfx.TargetKbps *= 1.1;
+                par.mfx.MaxKbps *= 1.1;
+
+                sts = mfxENC.Reset(&par);
+                MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+
+                sts = mfxENC.GetVideoParam(&par);
+                MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+                mfxBS.MaxLength = par.mfx.BufferSizeInKB * 1000;
+                bstData.resize(mfxBS.MaxLength);
+                mfxBS.Data = bstData.data();
+                printf("Bitrate to %d [kbps], frame size: %d [kB]\n", par.mfx.TargetKbps, par.mfx.BufferSizeInKB);
             }
         }
     }
