@@ -137,7 +137,19 @@ int main(int argc, char** argv)
 
     mfxEncParams.IOPattern = MFX_IOPATTERN_IN_SYSTEM_MEMORY;
 
-
+    mfxExtCodingOption extendedCodingOptions;
+    memset(&extendedCodingOptions, 0, sizeof(extendedCodingOptions));
+    extendedCodingOptions.Header.BufferId = MFX_EXTBUFF_CODING_OPTION;
+    extendedCodingOptions.Header.BufferSz = sizeof(extendedCodingOptions);
+    extendedCodingOptions.AUDelimiter = MFX_CODINGOPTION_OFF;
+    extendedCodingOptions.PicTimingSEI = MFX_CODINGOPTION_OFF;
+    extendedCodingOptions.VuiNalHrdParameters = MFX_CODINGOPTION_OFF;
+    extendedCodingOptions.VuiVclHrdParameters = MFX_CODINGOPTION_OFF;
+ 
+    mfxExtBuffer* extBuffer[1];
+    extBuffer[0] = (mfxExtBuffer*)&extendedCodingOptions;
+    mfxEncParams.ExtParam = extBuffer;
+    mfxEncParams.NumExtParam = 1;
 
     // Validate video encode parameters (optional)
     // - In this example the validation result is written to same structure
