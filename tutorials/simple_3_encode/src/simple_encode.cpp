@@ -121,8 +121,8 @@ int main(int argc, char** argv)
     mfxEncParams.mfx.IdrInterval = 0;
     mfxEncParams.mfx.FrameInfo.FourCC = MFX_FOURCC_NV12;
     mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
-    mfxEncParams.mfx.BitDepthLuma = 0;
-    mfxEncParams.mfx.BitDepthChroma = 0;
+    mfxEncParams.mfx.FrameInfo.BitDepthLuma = 0;
+    mfxEncParams.mfx.FrameInfo.BitDepthChroma = 0;
     mfxEncParams.mfx.FrameInfo.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
     mfxEncParams.mfx.FrameInfo.CropX = 0;
     mfxEncParams.mfx.FrameInfo.CropY = 0;
