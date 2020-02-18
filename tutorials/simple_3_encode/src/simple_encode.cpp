@@ -104,8 +104,10 @@ int main(int argc, char** argv)
     mfxVideoParam mfxEncParams;
     memset(&mfxEncParams, 0, sizeof(mfxEncParams));
 
+    // https://github.com/open-webrtc-toolkit/owt-client-native/blob/master/talk/owt/sdk/base/win/msdkvideoencoder.cc
     mfxEncParams.mfx.CodecId = MFX_CODEC_AVC;
-    mfxEncParams.mfx.TargetUsage = MFX_TARGETUSAGE_BALANCED;
+    mfxEncParams.mfx.LowPower = MFX_CODINGOPTION_ON;
+    mfxEncParams.mfx.TargetUsage = MFX_TARGETUSAGE_BEST_SPEED;
     mfxEncParams.mfx.TargetKbps = options.values.Bitrate;
     mfxEncParams.mfx.MaxKbps = options.values.Bitrate;
     mfxEncParams.mfx.RateControlMethod = MFX_RATECONTROL_VBR;
@@ -119,6 +121,8 @@ int main(int argc, char** argv)
     mfxEncParams.mfx.IdrInterval = 0;
     mfxEncParams.mfx.FrameInfo.FourCC = MFX_FOURCC_NV12;
     mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
+    mfxEncParams.mfx.BitDepthLuma = 0;
+    mfxEncParams.mfx.BitDepthChroma = 0;
     mfxEncParams.mfx.FrameInfo.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
     mfxEncParams.mfx.FrameInfo.CropX = 0;
     mfxEncParams.mfx.FrameInfo.CropY = 0;
